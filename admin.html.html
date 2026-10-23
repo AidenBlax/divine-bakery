@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Divine Bakery | Private Admin Portal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 text-slate-100 antialiased min-h-screen flex flex-col">
+
+    <!-- LOGIN SCREEN OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-6">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl max-w-md w-full shadow-2xl space-y-6">
+            <div class="text-center space-y-2">
+                <div class="w-12 h-12 bg-rose-600/20 text-rose-500 rounded-2xl flex items-center justify-center mx-auto text-xl font-bold">🔒</div>
+                <h1 class="text-2xl font-bold text-white">Divine Bakery Portal</h1>
+                <p class="text-xs text-slate-400">Secret Management Access for Bakery Owners</p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Admin Passcode</label>
+                    <input type="password" id="passInput" placeholder="Enter password..." class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-rose-500 transition">
+                </div>
+                <div id="loginError" class="hidden text-xs text-rose-400 text-center font-medium">Incorrect password. Please try again.</div>
+                <button onclick="attemptLogin()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-rose-600/20 transition">
+                    Unlock Dashboard
+                </button>
+            </div>
+            <div class="text-center text-[11px] text-slate-500">Default password: <code class="text-rose-400 bg-slate-800 px-2 py-1 rounded">divine2026</code></div>
+        </div>
+    </div>
+
+    <!-- MAIN ADMIN DASHBOARD CONTENT -->
+    <div id="dashboardContent" class="hidden flex-1 flex flex-col">
+        <!-- Top Navigation -->
+        <header class="bg-slate-950 border-b border-slate-800 px-6 py-4 sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <span class="bg-rose-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">ADMIN</span>
+                    <h2 class="text-lg font-bold text-white">Divine Bakery Dashboard</h2>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="openChangePasswordModal()" class="text-xs text-slate-400 hover:text-white transition bg-slate-800 px-3 py-2 rounded-lg">⚙️ Change Passcode</button>
+                    <button onclick="logout()" class="text-xs text-rose-400 hover:text-rose-300 transition bg-rose-950/50 border border-rose-900 px-3 py-2 rounded-lg">Lock Portal</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-6 py-8 flex-1 space-y-8 w-full">
+            <!-- Analytics Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-800/60 border border-slate-800 p-6 rounded-2xl">
+                    <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Real Orders</div>
+                    <div id="totalOrdersCount" class="text-3xl font-bold text-white mt-2">0</div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-800 p-6 rounded-2xl">
+                    <div class="text-xs text-amber-400 font-semibold uppercase tracking-wider">Pending Baking Tasks</div>
+                    <div id="pendingOrdersCount" class="text-3xl font-bold text-amber-400 mt-2">0</div>
+                </div>
+                <div class="bg-slate-800/60 border border-slate-800 p-6 rounded-2xl">
+                    <div class="text-xs text-emerald-400 font-semibold uppercase tracking-wider">Estimated Revenue</div>
+                    <div id="totalRevenueSum" class="text-3xl font-bold text-emerald-400 mt-2">KSh 0</div>
+                </div>
+            </div>
+
+            <!-- Table Header Controls -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h3 class="text-xl font-bold text-white">Live Customer Orders</h3>
+                <input type="text" id="searchFilter" onkeyup="filterOrders()" placeholder="Search customer, phone, or location..." class="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-rose-500 w-full md:w-72">
+            </div>
+
+            <!-- Orders Table -->
+            <div class="bg-slate-800/40 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                            <tr>
+                                <th class="p-4">Order ID & Date</th>
+                                <th class="p-4">Customer Details</th>
+                                <th class="p-4">Cake Choice</th>
+                                <th class="p-4">Location & Delivery Time</th>
+                                <th class="p-4">Custom Writing</th>
+                                <th class="p-4">Status</th>
+                                <th class="p-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody" class="divide-y divide-slate-800 text-slate-200">
+                            <!-- Live Firebase rows render here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- CHANGE PASSWORD MODAL -->
+    <div id="pwdModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full space-y-4">
+            <h3 class="text-lg font-bold text-white">Update Admin Passcode</h3>
+            <input type="password" id="newPwdInput" placeholder="Enter new passcode..." class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs">
+            <div class="flex gap-2">
+                <button onclick="saveNewPassword()" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 rounded-xl text-xs">Save New Passcode</button>
+                <button onclick="closePwdModal()" class="px-4 bg-slate-800 text-slate-300 rounded-xl text-xs">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIREBASE REAL-TIME DATABASE SCRIPT -->
+    <script>
+        // Shared Realtime Cloud Storage setup
+        const firebaseConfig = {
+            databaseURL: "https://divine-bakery-demo-default-rtdb.firebaseio.com"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let allOrders = {};
+
+        // Passcode setup
+        function getStoredPassword() {
+            return localStorage.getItem("divineAdminPwd") || "divine2026";
+        }
+
+        function attemptLogin() {
+            const input = document.getElementById('passInput').value;
+            if (input === getStoredPassword()) {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('dashboardContent').classList.remove('hidden');
+                loadLiveOrders();
+            } else {
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('dashboardContent').classList.add('hidden');
+            document.getElementById('passInput').value = "";
+        }
+
+        function openChangePasswordModal() { document.getElementById('pwdModal').classList.remove('hidden'); }
+        function closePwdModal() { document.getElementById('pwdModal').classList.add('hidden'); }
+
+        function saveNewPassword() {
+            const newPwd = document.getElementById('newPwdInput').value;
+            if (newPwd.length < 4) { alert("Passcode must be at least 4 characters long!"); return; }
+            localStorage.setItem("divineAdminPwd", newPwd);
+            alert("Passcode updated successfully!");
+            closePwdModal();
+        }
+
+        // Synchronize with Firebase database
+        function loadLiveOrders() {
+            database.ref('orders').on('value', (snapshot) => {
+                allOrders = snapshot.val() || {};
+                renderOrdersTable();
+            });
+        }
+
+        function updateOrderStatus(orderId, newStatus) {
+            database.ref('orders/' + orderId).update({ status: newStatus });
+        }
+
+        function renderOrdersTable() {
+            const tbody = document.getElementById('ordersTableBody');
+            tbody.innerHTML = '';
+
+            const keys = Object.keys(allOrders).reverse();
+            let total = keys.length;
+            let pending = 0;
+            let revenueSum = 0;
+
+            if (total === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-slate-500">No orders placed yet. Submit a test order on index.html!</td></tr>`;
+            }
+
+            keys.forEach(key => {
+                const item = allOrders[key];
+                if (item.status === 'Pending') pending++;
+
+                // Revenue estimation calculation
+                if (item.cake.includes('3,500')) revenueSum += 3500;
+                else if (item.cake.includes('3,800')) revenueSum += 3800;
+                else if (item.cake.includes('12,000')) revenueSum += 12000;
+                else if (item.cake.includes('1,200')) revenueSum += 1200;
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-800/50 transition";
+                
+                const cleanPhone = (item.phone || '').replace(/[^0-9]/g, '');
+                const waText = encodeURIComponent(`Hello ${item.name}, this is Divine Bakery regarding your order (${item.cake}) scheduled for ${item.date}. We have received your details!`);
+
+                row.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold text-rose-400">${item.id}</div>
+                        <div class="text-[10px] text-slate-500">${new Date(item.createdAt || Date.now()).toLocaleDateString()}</div>
+                    </td>
+                    <td class="p-4">
+                        <div class="font-semibold text-white">${item.name}</div>
+                        <div class="text-[11px] text-slate-400">${item.phone}</div>
+                    </td>
+                    <td class="p-4 font-medium text-slate-300">${item.cake}</td>
+                    <td class="p-4">
+                        <div class="text-white">${item.location}</div>
+                        <div class="text-[10px] text-amber-400">${item.date}</div>
+                    </td>
+                    <td class="p-4 text-slate-400 italic">${item.notes || 'None'}</td>
+                    <td class="p-4">
+                        <select onchange="updateOrderStatus('${item.id}', this.value)" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1 text-white">
+                            <option value="Pending" ${item.status === 'Pending' ? 'selected' : ''}>⏳ Pending</option>
+                            <option value="In Progress" ${item.status === 'In Progress' ? 'selected' : ''}>👩‍🍳 Baking</option>
+                            <option value="Completed" ${item.status === 'Completed' ? 'selected' : ''}>✅ Completed</option>
+                            <option value="Cancelled" ${item.status === 'Cancelled' ? 'selected' : ''}>❌ Cancelled</option>
+                        </select>
+                    </td>
+                    <td class="p-4">
+                        <a href="https://wa.me/254${cleanPhone}?text=${waText}" target="_blank" class="bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-[11px] font-semibold hover:bg-emerald-600 hover:text-white transition inline-block">
+                            💬 WhatsApp
+                        </a>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('totalOrdersCount').innerText = total;
+            document.getElementById('pendingOrdersCount').innerText = pending;
+            document.getElementById('totalRevenueSum').innerText = "KSh " + revenueSum.toLocaleString();
+        }
+
+        function filterOrders() {
+            const query = document.getElementById('searchFilter').value.toLowerCase();
+            const rows = document.querySelectorAll('#ordersTableBody tr');
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+</html>
